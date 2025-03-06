@@ -1,39 +1,40 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, getDoc } from "firebase/firestore"; // Sørg for at getDoc er importeret
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlusCircle, faMinusCircle, faTrashCan } from '@fortawesome/free-solid-svg-icons';
+import ClassList from '../components/ClassList';
+import StudentList from '../components/StudentList';
+import AddClassForm from "../components/AddClassForm";
+import Modal from "../components/Modal";
 
 const Dashboard = () => {
     const [classes, setClasses] = useState([]);
-    const [newClassName, setNewClassName] = useState("");
     const [selectedClass, setSelectedClass] = useState(null);
     const [students, setStudents] = useState([]);
-    const [newStudentName, setNewStudentName] = useState("");
     const [user, setUser] = useState(null);
-    const [showClassInfo, setShowClassInfo] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [incrementIconColor, setIncrementIconColor] = useState({});
-    const [decrementIconColor, setDecrementIconColor] = useState({});
+    const [showClassInfo, setShowClassInfo] = useState(null);  // Hvilken klasses info vises?
+    const [isLoading, setIsLoading] = useState(false);       // Loading state
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false); // Modal til sletning
+    const [studentToDelete, setStudentToDelete] = useState(null);     // ID på eleven, der skal slettes
+    const [classToDelete, setClassToDelete] = useState(null);       // ID på klassen, der skal slettes
 
     const navigate = useNavigate();
 
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) {
-                setUser(user);
-                fetchClasses(user.uid);
+        const unsubscribe = auth.onAuthStateChanged((authUser) => { // Lytter til ændringer i auth state
+            if (authUser) {
+                setUser(authUser); // Sæt user state, hvis brugeren er logget ind
+                fetchClasses(authUser.uid); // Hent klasser for den bruger
             } else {
-                navigate("/");
+                navigate("/"); // Omdiriger til login, hvis ikke logget ind
             }
         });
 
-        return () => unsubscribe();
-    }, [navigate]);
+        return () => unsubscribe(); // Afmeld listener, når komponenten unmountes
+    }, [navigate]); // Dependency array: Kør kun useEffect, når navigate ændres
 
     const fetchClasses = async (userId) => {
-        setIsLoading(true);
+        setIsLoading(true); // Start loading
         try {
             const classQuery = query(collection(db, "classes"), where("ownerId", "==", userId));
             const classSnapshot = await getDocs(classQuery);
@@ -44,160 +45,132 @@ const Dashboard = () => {
             setClasses(classList);
         } catch (error) {
             console.error("Fejl ved hentning af klasser:", error);
-            alert("Der opstod en fejl ved indlæsning af klasser.");
+            alert("Der opstod en fejl ved indlæsning af klasser."); // Vis fejlmeddelelse
         } finally {
-            setIsLoading(false);
+            setIsLoading(false); // Stop loading (uanset om det lykkedes eller ej)
         }
     };
-  // Hent elever for en valgt klasse (og klassens sportsSessions)
+
     const fetchStudents = async (classId) => {
         setIsLoading(true);
-        setSelectedClass(classId);
+        setSelectedClass(classId); // Sæt den valgte klasse
         try {
-            const studentSnapshot = await getDocs(collection(db, `classes/${classId}/students`));
-            const studentList = studentSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-
-            // RETTET: Definer doc-referencen *først*.  Dette var den primære fejl.
-            const classRef = doc(db, "classes", classId); // Opret en *reference*
-            const classDoc = await getDoc(classRef);       // *Hent* dokumentet vha. referencen.
+            const classRef = doc(db, "classes", classId);
+            const classDoc = await getDoc(classRef);
 
             if (classDoc.exists()) {
-                const classData = classDoc.data();
-                const sportsSessions = classData.sportsSessions;
-
-                const studentsWithData = studentList.map(student => ({
-                    ...student,
-                    sportsSessions: sportsSessions,
+                const studentSnapshot = await getDocs(collection(db, `classes/${classId}/students`));
+                const studentList = studentSnapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data(),
                 }));
-                setStudents(studentsWithData);
+
+                setStudents(studentList);
 
             } else {
                 console.error("Klasse ikke fundet:", classId);
                 alert("Den valgte klasse findes ikke.");
-                setStudents([]);
+                setStudents([]); // Ryd elever, hvis klassen ikke findes
             }
+
+
         } catch (error) {
             console.error("Fejl ved hentning af elever:", error);
             alert("Der opstod en fejl ved indlæsning af elever.");
-            setStudents([]);
+            setStudents([]); // Ryd elever ved fejl
         } finally {
             setIsLoading(false);
         }
     };
 
 
-    const handleAddClass = async () => {
-      if (newClassName.trim() === "" || !user) {
-          alert("Udfyld venligst klassenavnet.");
-          return;
-      }
-  
-      try {
-          const classRef = await addDoc(collection(db, "classes"), { //Her laves der et object, som indeholder det der skal gemmes i databasen
-              name: newClassName,
-              ownerId: user.uid,  // <--- MEGET VIGTIGT
-              sportsSessions: 0,
-          });
-  
-          const newClass = { id: classRef.id, name: newClassName, ownerId: user.uid, sportsSessions: 0 }; //Dette bruges kun til at opdatere din lokale state.
-          setClasses([...classes, newClass]);
-          setNewClassName("");
-          setSelectedClass(classRef.id);
-          fetchStudents(classRef.id);
-  
-      } catch (error) {
-          console.error("Fejl ved oprettelse af klasse:", error);
-          alert("Der opstod en fejl ved oprettelse af klassen.");
-      }
-  };
 
-    const handleAddStudent = async () => {
-        if (!selectedClass || newStudentName.trim() === "") {
-            alert("Vælg en klasse og udfyld elevnavnet.");
+    const handleAddClass = async (newClassName) => { // Modtager klassenavn som argument
+        if (newClassName.trim() === "" || !user) {
+            alert("Udfyld venligst klassenavnet.");
             return;
         }
 
         try {
-            const studentRef = await addDoc(collection(db, `classes/${selectedClass}/students`), {
+            const classRef = await addDoc(collection(db, "classes"), {
+                name: newClassName,
+                ownerId: user.uid,
+                sportsSessions: 0,
+            });
+
+            const newClass = { id: classRef.id, name: newClassName, ownerId: user.uid, sportsSessions: 0 };
+            setClasses([...classes, newClass]); // Tilføj den nye klasse til state
+            setNewClassName(""); // Ryd input-feltet (fjernet, da det nu er AddClassForm's ansvar)
+            setSelectedClass(classRef.id); // Vælg den nye klasse
+            fetchStudents(classRef.id);   // Hent elever for den nye klasse (tom i starten)
+
+        } catch (error) {
+            console.error("Fejl ved oprettelse af klasse:", error);
+            alert("Der opstod en fejl ved oprettelse af klassen.");
+        }
+    };
+
+
+
+    const handleAddStudent = async (newStudentName) => { // Modtager elevnavn som argument
+
+        if (!selectedClass || newStudentName.trim() === "") {
+            alert("Vælg en klasse og udfyld elevnavnet.");
+            return;
+        }
+        try {
+            const studentRef = await addDoc(collection(db, `classes/${selectedClass.id}/students`), { // Brug selectedClass.id
                 name: newStudentName,
                 forgotCount: 0,
             });
 
-            //  Opdater *ikke* sportsSessions her.
-            setStudents([...students, { id: studentRef.id, name: newStudentName, forgotCount: 0, sportsSessions: students[0]?.sportsSessions || 0 }]);
-            setNewStudentName("");
+            setStudents([...students, { id: studentRef.id, name: newStudentName, forgotCount: 0 }]);
+            //setNewStudentName(""); //Fjernet, da det nu er StudentList's ansvar
         } catch (error) {
             console.error("Fejl ved oprettelse af elev:", error);
             alert("Der opstod en fejl ved tilføjelse af elev.");
         }
     };
 
+
     const incrementForgotCount = async (studentId, currentCount) => {
-        const oldCount = currentCount;
-
-        setIncrementIconColor(prev => ({ ...prev, [studentId]: 'orange' }));
-        setTimeout(() => {
-            setIncrementIconColor(prev => ({ ...prev, [studentId]: undefined }));
-        }, 500);
-
-        setStudents(students.map(student =>
-            student.id === studentId ? { ...student, forgotCount: currentCount + 1 } : student
-        ));
-
         try {
             const studentRef = doc(db, `classes/${selectedClass}/students`, studentId);
             await updateDoc(studentRef, { forgotCount: currentCount + 1 });
+            // Opdater lokalt for hurtig UI-opdatering:
+            setStudents(students.map(student =>
+                student.id === studentId ? { ...student, forgotCount: currentCount + 1 } : student
+            ));
 
         } catch (error) {
             console.error("Fejl ved opdatering af glemt tøj:", error);
-            setStudents(students.map(student =>
-                student.id === studentId ? { ...student, forgotCount: oldCount } : student
-            ));
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
     };
 
+
     const decrementForgotCount = async (studentId, currentCount) => {
-        const oldCount = currentCount;
-        const newCount = Math.max(0, currentCount - 1);
-
-        setDecrementIconColor(prev => ({ ...prev, [studentId]: 'orange' }));
-        setTimeout(() => {
-            setDecrementIconColor(prev => ({ ...prev, [studentId]: undefined }));
-        }, 500);
-
-        setStudents(students.map(student =>
-            student.id === studentId ? { ...student, forgotCount: newCount } : student
-        ));
-
+        const newCount = Math.max(0, currentCount - 1); // Sikrer, at forgotCount ikke bliver negativ
 
         try {
             const studentRef = doc(db, `classes/${selectedClass}/students`, studentId);
             await updateDoc(studentRef, { forgotCount: newCount });
+            // Opdater lokalt for hurtig UI-opdatering:
+            setStudents(students.map(student =>
+                student.id === studentId ? { ...student, forgotCount: newCount } : student
+            ));
 
         } catch (error) {
             console.error("Fejl ved opdatering af glemt tøj:", error);
-            setStudents(students.map(student =>
-                student.id === studentId ? { ...student, forgotCount: oldCount } : student
-            ));
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
     };
 
-    const deleteStudent = async (studentId) => {
-        if (!window.confirm("Er du sikker på, at du vil slette denne elev?")) return;
 
-        try {
-            await deleteDoc(doc(db, `classes/${selectedClass}/students`, studentId));
-            setStudents(students.filter(student => student.id !== studentId));
-        } catch (error) {
-            console.error("Fejl ved sletning af elev:", error);
-            alert("Der opstod en fejl ved sletning af eleven.");
-        }
+    const deleteStudent = (studentId) => {
+        openDeleteStudentModal(studentId); // Åbn modal, gem ID
     };
+
 
     const handleLogout = async () => {
         await auth.signOut();
@@ -205,278 +178,159 @@ const Dashboard = () => {
     };
 
     const incrementSportsSessions = async (classId, currentSessions) => {
-        const oldSessions = currentSessions;
+
         try {
             const classRef = doc(db, "classes", classId);
+            await updateDoc(classRef, { sportsSessions: currentSessions + 1 });
+            // Opdater lokalt for hurtig UI-opdatering:
             setClasses(classes.map((classItem) =>
                 classItem.id === classId ? { ...classItem, sportsSessions: currentSessions + 1 } : classItem
             ));
-            await updateDoc(classRef, { sportsSessions: currentSessions + 1 });
-            //Opdater efter ændring
-            if (selectedClass === classId) {
+            // Opdater sportsSessions i den valgte klasse *efter* opdatering i databasen
+            if (selectedClass && selectedClass.id === classId) {
                 fetchStudents(classId);
             }
 
         } catch (error) {
-            setClasses(classes.map((classItem) =>
-                classItem.id === classId ? { ...classItem, sportsSessions: oldSessions } : classItem
-            ));
             console.error("Fejl ved opdatering af idrætssessioner:", error);
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
     };
+
 
     const decrementSportsSessions = async (classId, currentSessions) => {
         if (currentSessions <= 0) {
             alert("Antal idrætssessioner kan ikke være mindre end 0.");
             return;
         }
-        const oldSessions = currentSessions;
+        const newSessions = currentSessions -1
         try {
             const classRef = doc(db, "classes", classId);
+            await updateDoc(classRef, { sportsSessions: newSessions });
+            // Opdater lokalt:
             setClasses(classes.map((classItem) =>
-                classItem.id === classId ? { ...classItem, sportsSessions: currentSessions - 1 } : classItem
+                classItem.id === classId ? { ...classItem, sportsSessions: newSessions } : classItem
             ));
-            await updateDoc(classRef, { sportsSessions: currentSessions - 1 });
 
-            //Opdater efter ændring
-            if (selectedClass === classId) {
-                fetchStudents(classId);
+            // Opdater sportsSessions i den valgte klasse *efter* opdatering i databasen
+            if (selectedClass && selectedClass.id === classId) {
+                fetchStudents(classId); // Opdater sportsSessions i state.
             }
         } catch (error) {
-            setClasses(classes.map((classItem) =>
-                classItem.id === classId ? { ...classItem, sportsSessions: oldSessions } : classItem
-            ));
             console.error("Fejl ved opdatering af idrætssessioner:", error);
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
     };
 
-    const deleteClass = async (classId) => {
-        if (!window.confirm("Er du sikker på, at du vil slette denne klasse og ALLE tilhørende elever? Denne handling kan IKKE fortrydes.")) {
-            return;
-        }
+    const openDeleteStudentModal = (studentId) => {
+        setStudentToDelete(studentId);
+        setIsDeleteModalOpen(true);
+    };
+
+    const openDeleteClassModal = (classId) => {
+        setClassToDelete(classId);
+        setIsDeleteModalOpen(true);
+    };
+
+    const closeDeleteModal = () => {
+        setIsDeleteModalOpen(false);
+        setStudentToDelete(null); // Nulstil
+        setClassToDelete(null); // Nulstil
+    };
+
+    const confirmDeleteStudent = async () => {
+        if (!studentToDelete) return;
 
         try {
-            const studentsRef = collection(db, `classes/${classId}/students`);
-            const studentSnapshot = await getDocs(studentsRef);
-            studentSnapshot.forEach(async (studentDoc) => {
-                await deleteDoc(doc(db, `classes/${classId}/students`, studentDoc.id));
-            });
-
-            await deleteDoc(doc(db, "classes", classId));
-
-            setClasses(classes.filter(classItem => classItem.id !== classId));
-            setSelectedClass(null);
-            setStudents([]);
-
+            await deleteDoc(doc(db, `classes/${selectedClass}/students`, studentToDelete));
+            // Opdater den lokale state *efter* den succesfulde sletning fra Firestore:
+            setStudents(students.filter(student => student.id !== studentToDelete));
+            closeDeleteModal(); // Luk modalen
         } catch (error) {
-            console.error("Fejl ved sletning af klasse:", error);
-            alert("Der opstod en fejl under sletningen.  Prøv igen.");
+            console.error("Fejl ved sletning af elev:", error);
+            alert("Der opstod en fejl ved sletning af eleven.");
+            closeDeleteModal(); // Luk modalen, selvom der er en fejl
         }
     };
 
-    return (
-        <div style={styles.container}>
-            <h2 className="text-4xl font-extrabold text-indigo-600 mb-8">Mine Klasser</h2>
+    const confirmDeleteClass = async () => {
+        if (!classToDelete) return;
 
-            {/* Opret ny klasse */}
-            <div style={styles.form}>
-                <input
-                    type="text"
-                    value={newClassName}
-                    onChange={(e) => setNewClassName(e.target.value)}
-                    placeholder="Indtast klassenavn"
-                    style={styles.input}
-                />
-                <button onClick={handleAddClass} style={styles.button}>
-                    Opret Klasse
-                </button>
-            </div>
+        try {
+            // 1. Slet alle elever i klassen (fra subcollection)
+            const studentsRef = collection(db, `classes/${classToDelete}/students`);
+            const studentSnapshot = await getDocs(studentsRef);
+
+            // Vent på, at *alle* elev-sletninger er færdige:
+            await Promise.all(studentSnapshot.docs.map(studentDoc =>
+                deleteDoc(doc(db, `classes/${classToDelete}/students`, studentDoc.id))
+            ));
+
+            // 2. Slet selve klassen (fra root collection)
+            await deleteDoc(doc(db, "classes", classToDelete));
+
+            // 3. Opdater den lokale state (fjern klassen fra listen)
+            setClasses(classes.filter(classItem => classItem.id !== classToDelete));
+            setSelectedClass(null); // Vigtigt: Nulstil selectedClass
+            setStudents([]);       // Ryd elever, da den valgte klasse er slettet.
+            closeDeleteModal();    // Luk modalen
+
+        } catch (error) {
+            console.error("Fejl ved sletning af klasse:", error);
+            alert("Der opstod en fejl under sletningen. Prøv igen."); // Vis fejlmeddelelse
+            closeDeleteModal(); // Luk modalen
+        }
+    };
+
+
+
+    return (
+        <div className="container">
+            <h2 className="heading">Mine Klasser</h2>
+
+            <AddClassForm onAddClass={handleAddClass} />
 
             {/* Vis loading indikator */}
-            {isLoading && <p>Indlæser...</p>}
+            {isLoading && <p className="loading">Indlæser...</p>}
 
             {/* Liste over klasser */}
-            <ul style={styles.list}>
-                {!isLoading && classes.map((classItem) => (
-                    <li key={classItem.id} style={styles.listItem}>
-                        <span onClick={() => fetchStudents(classItem.id)} style={styles.listItemClickable}>
-                            {classItem.name}
-                        </span>
+            <ClassList
+                classes={classes}
+                selectedClass={selectedClass}
+                onClassSelect={fetchStudents}
+                user={user}
+                showClassInfo={showClassInfo}
+                setShowClassInfo={setShowClassInfo}
+                onDeleteClass={openDeleteClassModal}
+                onIncrementSportsSessions={incrementSportsSessions}
+                onDecrementSportsSessions={decrementSportsSessions}
+            />
 
-                        {user && user.uid === classItem.ownerId && (
-                            <>
-                                <button
-                                    onClick={() => setShowClassInfo(showClassInfo === classItem.id ? null : classItem.id)}
-                                    style={styles.smallButtonGreen}
-                                >
-                                    {showClassInfo === classItem.id ? "Skjul Info" : "Vis Info"}
-                                </button>
-                                <button onClick={() => incrementSportsSessions(classItem.id, classItem.sportsSessions)} style={styles.smallButtonGreen}> + </button>
-                                {/* Fjern den duplikerede + knap */}
-                                <button onClick={() => decrementSportsSessions(classItem.id, classItem.sportsSessions)} style={styles.smallButtonRed}> - </button>
-                                <button onClick={() => deleteClass(classItem.id)} style={styles.deleteButton}>
-                                    <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: '5px' }} />
-                                    Slet Klasse
-                                </button>
-                            </>
-                        )}
-
-                        {showClassInfo === classItem.id && (
-                            <div style={{ marginTop: "5px" }}>
-                                Antal idrætssessioner: {classItem.sportsSessions}
-                            </div>
-                        )}
-                    </li>
-                ))}
-            </ul>
 
             {/* Elev-sektion */}
-            {selectedClass && (
-                <div>
-                    <h3>Elever i {classes.find(c => c.id === selectedClass)?.name}</h3>
+            <StudentList
+                students={students}
+                selectedClass={selectedClass}
+                onAddStudent={handleAddStudent}
+                onIncrementForgotCount={incrementForgotCount}
+                onDecrementForgotCount={decrementForgotCount}
+                onDeleteStudent={openDeleteStudentModal}
+            />
 
-                    {/* Opret elev */}
-                    <div style={styles.form}>
-                        <input
-                            type="text"
-                            value={newStudentName}
-                            onChange={(e) => setNewStudentName(e.target.value)}
-                            placeholder="Indtast elevnavn"
-                            style={styles.input}
-                        />
-                        <button onClick={handleAddStudent} style={styles.button}>
-                            Tilføj Elev
-                        </button>
-                    </div>
 
-                    {/* Elevliste */}
-                    <ul style={styles.list}>
-                        {students.map((student) => (
-                            <li key={student.id} style={styles.listItem}>
-                                {student.name} - Glemt tøj: {student.forgotCount}
-                                {student.sportsSessions > 0
-                                    ? (() => {
-                                        const percentage = (student.forgotCount / student.sportsSessions) * 100;
-                                        return isNaN(percentage) || !isFinite(percentage)
-                                            ? "(Ugyldig data)"
-                                            : `(${percentage.toFixed(1)}%)`;
-                                    })()
-                                    : "(Ingen data)"
-                                }
-                                <span style={{ marginLeft: '10px' }}>
-                                    <FontAwesomeIcon
-                                        icon={faMinusCircle}
-                                        style={{
-                                            cursor: 'pointer',
-                                            color: decrementIconColor[student.id] || (student.forgotCount === 0 ? 'gray' : 'red')
-                                        }}
-                                        onClick={() => decrementForgotCount(student.id, student.forgotCount)}
-                                    />
-                                    <FontAwesomeIcon
-                                        icon={faPlusCircle}
-                                        style={{
-                                            cursor: 'pointer',
-                                            color: incrementIconColor[student.id] || 'green',
-                                            marginLeft: '5px'
-                                        }}
-                                        onClick={() => incrementForgotCount(student.id, student.forgotCount)}
-                                    />
-                                </span>
-                                <FontAwesomeIcon
-                                    icon={faTrashCan}
-                                    style={{ cursor: 'pointer', color: 'red', marginLeft: 10 }}
-                                    onClick={() => deleteStudent(student.id)}
-                                />
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
+            <button onClick={handleLogout} className="logoutButton">Log Ud</button>
 
-            <button onClick={handleLogout} style={styles.logoutButton}>Log Ud</button>
+            {/* Modal til sletning af elev/klasse */}
+            <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal}>
+                <h2>Bekræft Sletning</h2>
+                {studentToDelete && <p>Er du sikker på, at du vil slette denne elev?</p>}
+                {classToDelete && <p>Er du sikker på at du vil slette denne klasse?</p>}
+
+                <button onClick={studentToDelete ? confirmDeleteStudent : confirmDeleteClass} >Ja, Slet</button> {/* Udfør sletning */}
+                <button onClick={closeDeleteModal}>Annuller</button>
+            </Modal>
+
         </div>
     );
 };
-
-const styles = {
-    container: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        padding: "20px",
-    },
-    form: {
-        display: "flex",
-        gap: "10px",
-        marginBottom: "20px",
-    },
-    input: {
-        padding: "10px",
-        fontSize: "16px",
-    },
-    button: {
-        padding: "10px",
-        fontSize: "16px",
-        backgroundColor: "#007bff",
-        color: "white",
-        border: "none",
-        cursor: "pointer",
-    },
-    smallButtonGreen: {
-        marginLeft: "10px",
-        padding: "5px",
-        fontSize: "14px",
-        backgroundColor: "#28a745",
-        color: "white",
-        border: "none",
-        cursor: "pointer",
-    },
-    smallButtonRed: {
-        marginLeft: "10px",
-        padding: "5px",
-        fontSize: "14px",
-        backgroundColor: "red",
-        color: "white",
-        border: "none",
-        cursor: "pointer",
-    },
-    deleteButton: {
-        marginLeft: "10px",
-        padding: "5px",
-        fontSize: "14px",
-        backgroundColor: "black",
-        color: "white",
-        border: "none",
-        cursor: "pointer",
-    },
-    logoutButton: {
-        marginTop: "20px",
-        padding: "10px",
-        fontSize: "16px",
-        backgroundColor: "red",
-        color: "white",
-        border: "none",
-        cursor: "pointer",
-    },
-    listItemClickable: {
-        cursor: "pointer",
-        textDecoration: "underline",
-    },
-    list: {
-        listStyle: "none",
-        padding: "0",
-    },
-    listItem: {
-        padding: "10px",
-        margin: "5px",
-        backgroundColor: "#f4f4f4",
-        borderRadius: "5px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-    },
-};
-
 export default Dashboard;
