@@ -98,7 +98,6 @@ const Dashboard = () => {
 
             const newClass = { id: classRef.id, name: newClassName, ownerId: user.uid, sportsSessions: 0 };
             setClasses([...classes, newClass]); // Tilføj den nye klasse til state
-            setNewClassName(""); // Ryd input-feltet (fjernet, da det nu er AddClassForm's ansvar)
             setSelectedClass(classRef.id); // Vælg den nye klasse
             fetchStudents(classRef.id);   // Hent elever for den nye klasse (tom i starten)
 
@@ -200,13 +199,13 @@ const Dashboard = () => {
             alert("Antal idrætssessioner kan ikke være mindre end 0.");
             return;
         }
-         const oldSessions = currentSessions;
+        const newSessions = currentSessions -1
         try {
             const classRef = doc(db, "classes", classId);
              setClasses(classes.map((classItem) =>
-                classItem.id === classId ? { ...classItem, sportsSessions: currentSessions - 1 } : classItem
+                classItem.id === classId ? { ...classItem, sportsSessions: newSessions } : classItem
             ));
-            await updateDoc(classRef, { sportsSessions: currentSessions - 1 });
+            await updateDoc(classRef, { sportsSessions: newSessions });
 
 
             if (selectedClass === classId) {

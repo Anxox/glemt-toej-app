@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth, db } from '../firebase'; // Importer auth og db
+import { auth, db } from '../firebase';
 import {
     signInWithEmailAndPassword,
     signInWithPopup,
@@ -7,52 +7,53 @@ import {
     createUserWithEmailAndPassword
 } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { doc, setDoc, getDoc } from 'firebase/firestore'; // Importer Firestore funktioner
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGoogle } from '@fortawesome/free-brands-svg-icons'; // Importer Google-ikon
+import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'; // Importer øje-ikoner
+import Modal from '../components/Modal'; // Importer Modal-komponenten
 
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isSignUp, setIsSignUp] = useState(false); // Tilstand til at skifte mellem login og signup
-    const [error, setError] = useState(null);       // Tilstand til at gemme fejlbeskeder
-    const [isLoading, setIsLoading] = useState(false); // Loading state
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [error, setError] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false); // State til at vise/skjule adgangskode
+    const [showModal, setShowModal] = useState(false); // Modal state
     const navigate = useNavigate();
 
-    const handleLogin = async (e) => {
+    const handleLogin = async (e) => { // Samme som før
         e.preventDefault();
-        setError(null);  // Nulstil fejl før hvert forsøg
-        setIsLoading(true); // Start loading-indikatoren
+        setError(null);
+        setIsLoading(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            navigate('/dashboard'); // Omdiriger til dashboard ved succes
+            navigate('/dashboard');
         } catch (error) {
-            handleAuthError(error); // Brug den forbedrede fejlhåndteringsfunktion
+            handleAuthError(error); // Brug fejlhåndteringsfunktionen
         } finally {
-            setIsLoading(false); // Stop loading-indikatoren (uanset succes/fejl)
+            setIsLoading(false); // Stop loading
         }
     };
 
-    const handleGoogleLogin = async () => {
+    const handleGoogleLogin = async () => { // Samme som før
         const provider = new GoogleAuthProvider();
         setError(null);
         setIsLoading(true);
         try {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
-
-            // Tjek om brugeren allerede findes i Firestore
             const userRef = doc(db, "users", user.uid);
             const userDoc = await getDoc(userRef);
-
-            // Hvis brugeren IKKE findes, opret et dokument
             if (!userDoc.exists()) {
                 await setDoc(userRef, {
-                    displayName: user.displayName, // Gem Google-visningsnavn (hvis det findes)
-                    email: user.email, // Gem email
-                    // Tilføj evt. andre felter her (f.eks. photoURL)
+                    displayName: user.displayName, // Gem Google-visningsnavn
+                    email: user.email,
+                    // Andre felter
                 });
             }
-
             navigate('/dashboard');
         } catch (error) {
             handleAuthError(error);
@@ -61,31 +62,27 @@ const Login = () => {
         }
     };
 
-
-
-    const handleSignUp = async (e) => {
+    const handleSignUp = async (e) => { //Samme som før
         e.preventDefault();
         setError(null);
         setIsLoading(true);
-
         try {
             const result = await createUserWithEmailAndPassword(auth, email, password);
             const user = result.user;
-            // Gem brugerdata i Firestore EFTER succesfuld oprettelse
             const userRef = doc(db, "users", user.uid);
             await setDoc(userRef, {
                 email: user.email,
-                //Tilføj evt andre felter
+                // Tilføj andre felter (f.eks. displayName)
             });
 
             navigate('/dashboard');
         } catch (error) {
-            handleAuthError(error); // Brug den forbedrede fejlhåndteringsfunktion
+            handleAuthError(error); // Brug fejlhåndteringsfunktionen
         } finally {
-            setIsLoading(false); // Stop loading
+            setIsLoading(false);
         }
     };
-    // Forbedret fejlhåndteringsfunktion
+    // Forbedret fejlhåndteringsfunktion, præcis som før:
     const handleAuthError = (error) => {
         if (error.code === 'auth/email-already-in-use') {
             setError('Denne email er allerede i brug.');
@@ -101,51 +98,87 @@ const Login = () => {
         }
     };
 
+    // Funktion til at vise/skjule adgangskode
+    const togglePasswordVisibility = () => {
+        setShowPassword(!showPassword);
+    };
 
+    const toggleModal = () => {
+        setShowModal(!showModal);
+        // Nulstil formularen, *uanset* om modalen åbnes eller lukkes.
+        setEmail('');
+        setPassword('');
+        setError(null);
+        setIsSignUp(false);
+    };
 
     return (
         <div>
-            <h2>{isSignUp ? 'Opret Bruger' : 'Login'}</h2>
+           <button onClick={toggleModal} className="login-button">Login / Opret Bruger</button>
 
-            <form onSubmit={isSignUp ? handleSignUp : handleLogin}>
-                <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Email"
-                    required
-                    style={{ display: 'block', marginBottom: '10px', width: '100%' }}
-                />
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Adgangskode"
-                    required
-                    style={{ display: 'block', marginBottom: '10px', width: '100%' }}
-                />
-                <button type="submit" disabled={isLoading} >
-                    {isLoading ? 'Indlæser...' : (isSignUp ? 'Opret Bruger' : 'Log ind')}
-                </button>
+            {showModal && (
+                <Modal onClose={toggleModal}>
+                <div className="login-container">
+                    <button onClick={handleGoogleLogin} disabled={isLoading} className="google-login-button">
+                        <FontAwesomeIcon icon={faGoogle} className="google-icon" />
+                        Log ind med Google
+                    </button>
 
-                {/* Vis fejlbesked, HVIS der er en fejl */}
-                {error && <p style={{ color: 'red' }}>{error}</p>}
-            </form>
+                    {/* Skift mellem Login og Opret Bruger */}
+                    <h2>{isSignUp ? 'Opret Bruger' : 'Login'}</h2>
+                    <form onSubmit={isSignUp ? handleSignUp : handleLogin}  >
+                        <label htmlFor="email">Email:</label> {/* Label tilføjet */}
+                        <input
+                            type="email"
+                            id="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="Indtast din email"
+                            required
 
-            {!isSignUp && (
-                <button onClick={handleGoogleLogin} disabled={isLoading}>
-                    Log ind med Google
-                </button>
+                        />
+                        {error && error.includes("email") && <p className="error-message">{error}</p>}
+
+                        <label htmlFor="password">Adgangskode:</label> {/* Label tilføjet */}
+                        <div  className="password-input-container">
+                            <input
+                                type={showPassword ? "text" : "password"} // Skift type baseret på showPassword
+                                id="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Indtast din adgangskode"
+                                required
+
+                            />
+                            {/* Øje-ikon */}
+                            <FontAwesomeIcon
+                                icon={showPassword ? faEyeSlash : faEye}
+                                onClick={togglePasswordVisibility}
+                                className="password-icon"
+                            />
+                        </div>
+                        {error && error.includes("password") && <p className="error-message">{error}</p>}
+
+                        <button type="submit" disabled={isLoading} >
+                            {isLoading ? 'Indlæser...' : (isSignUp ? 'Opret Bruger' : 'Log ind')}
+                        </button>
+
+
+                    </form>
+
+                    <p>
+                        {isSignUp ? 'Har du allerede en konto?' : 'Har du ikke en konto?'}
+                        <button type="button" onClick={() => setIsSignUp(!isSignUp)}  >
+                            {isSignUp ? 'Log ind' : 'Opret bruger'}
+                        </button>
+                    </p>
+                    <button  onClick={toggleModal} >Luk</button>
+                    {/* Vis fejlmeddelelse, hvis der er en */}
+                    {error && <p className="error-message">{error}</p>}
+                </div>
+                </Modal>
             )}
-
-            <p>
-                {isSignUp ? 'Har du allerede en konto?' : 'Har du ikke en konto?'}
-                <button type="button" onClick={() => setIsSignUp(!isSignUp)}>  {/*Skift mellem login og signup */}
-                    {isSignUp ? 'Log ind' : 'Opret bruger'}
-                </button>
-            </p>
         </div>
     );
 };
-
 export default Login;
