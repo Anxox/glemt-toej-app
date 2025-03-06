@@ -6,7 +6,7 @@ function AddClassForm({ onAddClass }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onAddClass(newClassName); // Kald forældre-komponentens funktion
+        onAddClass(newClassName); // Kald forældre-komponentens funktion, og giv newClassName med som argument.
         setNewClassName(""); // Ryd input-feltet
     };
 

@@ -72,8 +72,6 @@ const Dashboard = () => {
                 alert("Den valgte klasse findes ikke.");
                 setStudents([]); // Ryd elever, hvis klassen ikke findes
             }
-
-
         } catch (error) {
             console.error("Fejl ved hentning af elever:", error);
             alert("Der opstod en fejl ved indlæsning af elever.");
@@ -124,7 +122,7 @@ const Dashboard = () => {
                 forgotCount: 0,
             });
 
-            setStudents([...students, { id: studentRef.id, name: newStudentName, forgotCount: 0 }]);
+            setStudents([...students, { id: studentRef.id, name: newStudentName, forgotCount: 0}]);
             //setNewStudentName(""); //Fjernet, da det nu er StudentList's ansvar
         } catch (error) {
             console.error("Fejl ved oprettelse af elev:", error);
@@ -167,7 +165,7 @@ const Dashboard = () => {
     };
 
 
-    const deleteStudent = (studentId) => {
+      const deleteStudent = (studentId) => {
         openDeleteStudentModal(studentId); // Åbn modal, gem ID
     };
 
@@ -181,42 +179,41 @@ const Dashboard = () => {
 
         try {
             const classRef = doc(db, "classes", classId);
-            await updateDoc(classRef, { sportsSessions: currentSessions + 1 });
-            // Opdater lokalt for hurtig UI-opdatering:
-            setClasses(classes.map((classItem) =>
+             setClasses(classes.map((classItem) =>
                 classItem.id === classId ? { ...classItem, sportsSessions: currentSessions + 1 } : classItem
             ));
-            // Opdater sportsSessions i den valgte klasse *efter* opdatering i databasen
-            if (selectedClass && selectedClass.id === classId) {
-                fetchStudents(classId);
+            await updateDoc(classRef, { sportsSessions: currentSessions + 1 });
+             //Opdater efter ændring
+            if (selectedClass === classId) {
+                fetchStudents(classId); // Genindlæs elever (og sportsSessions)
             }
 
         } catch (error) {
+
             console.error("Fejl ved opdatering af idrætssessioner:", error);
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
     };
-
 
     const decrementSportsSessions = async (classId, currentSessions) => {
         if (currentSessions <= 0) {
             alert("Antal idrætssessioner kan ikke være mindre end 0.");
             return;
         }
-        const newSessions = currentSessions -1
+         const oldSessions = currentSessions;
         try {
             const classRef = doc(db, "classes", classId);
-            await updateDoc(classRef, { sportsSessions: newSessions });
-            // Opdater lokalt:
-            setClasses(classes.map((classItem) =>
-                classItem.id === classId ? { ...classItem, sportsSessions: newSessions } : classItem
+             setClasses(classes.map((classItem) =>
+                classItem.id === classId ? { ...classItem, sportsSessions: currentSessions - 1 } : classItem
             ));
+            await updateDoc(classRef, { sportsSessions: currentSessions - 1 });
 
-            // Opdater sportsSessions i den valgte klasse *efter* opdatering i databasen
-            if (selectedClass && selectedClass.id === classId) {
-                fetchStudents(classId); // Opdater sportsSessions i state.
+
+            if (selectedClass === classId) {
+                fetchStudents(classId); //Opdater sportsSessions i state.
             }
         } catch (error) {
+
             console.error("Fejl ved opdatering af idrætssessioner:", error);
             alert("Der opstod en fejl. Ændringen blev ikke gemt.");
         }
@@ -231,6 +228,7 @@ const Dashboard = () => {
         setClassToDelete(classId);
         setIsDeleteModalOpen(true);
     };
+
 
     const closeDeleteModal = () => {
         setIsDeleteModalOpen(false);
@@ -253,7 +251,7 @@ const Dashboard = () => {
         }
     };
 
-    const confirmDeleteClass = async () => {
+      const confirmDeleteClass = async () => {
         if (!classToDelete) return;
 
         try {
@@ -269,10 +267,10 @@ const Dashboard = () => {
             // 2. Slet selve klassen (fra root collection)
             await deleteDoc(doc(db, "classes", classToDelete));
 
-            // 3. Opdater den lokale state (fjern klassen fra listen)
+            // 3. Opdater den lokale state (fjern klassen fra listen, og nulstil selectedClass)
             setClasses(classes.filter(classItem => classItem.id !== classToDelete));
-            setSelectedClass(null); // Vigtigt: Nulstil selectedClass
-            setStudents([]);       // Ryd elever, da den valgte klasse er slettet.
+            setSelectedClass(null);
+            setStudents([]);       // Ryd elever
             closeDeleteModal();    // Luk modalen
 
         } catch (error) {
@@ -281,7 +279,6 @@ const Dashboard = () => {
             closeDeleteModal(); // Luk modalen
         }
     };
-
 
 
     return (
@@ -333,4 +330,5 @@ const Dashboard = () => {
         </div>
     );
 };
+
 export default Dashboard;
