@@ -1,18 +1,27 @@
-// App.js
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import routes from "./routes"; // Importer dine ruter
+// src/App.js
+import React, { useEffect, useState } from "react";
+import { auth } from "./firebase"; // Hent auth fra firebase.js
+import { onAuthStateChanged } from "firebase/auth";
+import Login from "./components/Login";
+import Dashboard from "./components/Dashboard";
 
 function App() {
-    return (
-        <Router>
-            <Routes>
-                {routes.map((route, index) => (
-                    <Route key={index} path={route.path} element={route.element} />
-                ))}
-            </Routes>
-        </Router>
-    );
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribe(); // Unsubscribe ved unmount
+  }, []);
+
+  return (
+    <div className="App">
+      <h1>Glemt Tøj App</h1>
+      {user ? <Dashboard /> : <Login />}
+    </div>
+  );
 }
 
 export default App;
