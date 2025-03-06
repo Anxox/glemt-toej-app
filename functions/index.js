@@ -9,5 +9,5 @@ exports.config = functions.https.onRequest((req, res) => {
     messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
     appId: process.env.REACT_APP_APP_ID,
   };
-  res.json(config); // Returner konfigurationen som JSON
+  res.json(config);
 });
