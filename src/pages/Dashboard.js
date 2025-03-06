@@ -164,9 +164,9 @@ const Dashboard = () => {
     };
 
 
-      const deleteStudent = (studentId) => {
-        openDeleteStudentModal(studentId); // Åbn modal, gem ID
-    };
+     // const deleteStudent = (studentId) => {
+     //   openDeleteStudentModal(studentId); // Åbn modal, gem ID
+   // };
 
 
     const handleLogout = async () => {
