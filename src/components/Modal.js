@@ -2,6 +2,7 @@
 import React from 'react';
 
 function Modal({ isOpen, onClose, children }) {
+    console.log("Modal modtager isOpen:", isOpen); // Debugging
   if (!isOpen) {
     return null;
   }
